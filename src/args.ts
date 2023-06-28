@@ -5,8 +5,7 @@ export default Minimist(process.env.ARGS?.split(' ') || process.argv.slice(2), {
   boolean: ['debug', 'local'],
   default: {
     name: 'auth',
-    publicPort: 5000,
-    privatePort: 5001,
+    port: 5000,
     debug: false,
     local: false,
   },

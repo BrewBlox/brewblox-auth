@@ -1,10 +1,13 @@
 FROM node:18-alpine
 
-WORKDIR /opt/app
+WORKDIR /app
 
-COPY build/* /opt/app/
+COPY dist/ /app/
+COPY package.json /app/
+COPY yarn.lock /app/
 
-ENTRYPOINT ["node", "index.js"]
+RUN yarn install --prod --frozen-lockfile
 
-EXPOSE 3000
-EXPOSE 3001
+ENTRYPOINT ["node", "dist/main.js"]
+
+EXPOSE 5000

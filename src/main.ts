@@ -1,44 +1,54 @@
+import { bodyParser } from '@koa/bodyparser';
 import cors from '@koa/cors';
-import axios from 'axios';
+import jwt from 'jsonwebtoken';
 import Koa from 'koa';
-import session from 'koa-session';
-import { get } from 'lodash';
+import Router from 'koa-router';
 import args from './args';
-import { privateAuth, publicAuth } from './auth';
 import logger from './logger';
 
-const publicApp = new Koa();
-const privateApp = new Koa();
+const jwtSecretKey = 'JWT secret key';
+const validity = 1800;
 
-publicApp.use(session(publicApp));
-publicApp.use(cors());
-publicApp.use(publicAuth.routes());
-publicApp.use(publicAuth.allowedMethods());
+const router = new Router({ prefix: `/${args.name}` });
 
-privateApp.use(session(privateApp));
-privateApp.use(cors());
-privateApp.use(privateAuth.routes());
-privateApp.use(privateAuth.allowedMethods());
+router.get('/verify', (ctx) => {
+  try {
+    const authorization = ctx.get('Authorization');
+    jwt.verify(authorization, jwtSecretKey);
+    ctx.status = 200;
+  } catch (e) {
+    logger.info(e);
+    ctx.throw(401);
+  }
+});
 
-axios.interceptors.response.use(
-  (response) => response,
-  (e) => {
-    const resp = get(e, 'response.data', e.message ?? null);
-    const err = resp instanceof Object ? JSON.stringify(resp) : resp;
-    const url = get(e, 'response.config.url');
-    const method = get(e, 'response.config.method');
-    const status = get(e, 'response.status');
-    const msg = `[HTTP ERROR] method=${method}, url=${url}, status=${status}, response=${err}`;
-    return Promise.reject(new Error(msg));
-  },
-);
+router.post('/login', (ctx) => {
+  const { login, password } = ctx.request.body;
+  // TODO: get users from file
+  if (login !== 'login' || password !== 'password') {
+    ctx.throw(401);
+  }
+
+  const token = jwt.sign(
+    {
+      user: login,
+      exp: Math.floor(Date.now() / 1000) + validity,
+    },
+    jwtSecretKey,
+  );
+
+  ctx.status = 200;
+  ctx.res.setHeader('Authorization', token);
+});
+
+const app = new Koa();
+app.use(cors());
+app.use(bodyParser());
+app.use(router.routes());
+app.use(router.allowedMethods());
 
 logger.info('==========Startup==========');
 
-publicApp.listen(args.publicPort, () => {
-  logger.info(`Public app is running at http://0.0.0.0:${args.publicPort}`);
-});
-
-privateApp.listen(args.privatePort, () => {
-  logger.info(`Private app is running at http://0.0.0.0:${args.privatePort}`);
+app.listen(args.port, () => {
+  logger.info(`App is listening at http://0.0.0.0:${args.port}`);
 });
