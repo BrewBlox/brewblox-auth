@@ -1,17 +1,23 @@
 {
-  "editor.formatOnSave": true,
-  "eslint.run": "onType",
-  "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[yaml]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[dockercompose]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "typescript.tsdk": "node_modules/typescript/lib"
+    "python.defaultInterpreterPath": ".venv/bin/python",
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "python.terminal.activateEnvironment": true,
+    "python.linting.flake8Enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.testing.pytestArgs": [
+        "--no-cov",
+        "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.languageServer": "Pylance",
+    "files.watcherExclude": {
+        "**/.venv/*/**": true,
+        "victoria/**": true,
+        "redis/**": true
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.autopep8"
+    },
+    "python.formatting.provider": "none"
 }

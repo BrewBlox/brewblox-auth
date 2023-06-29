@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "brewblox-auth"
+version = "1.0.0"
+description = "Brewblox authentication middleware"
+authors = ["BrewPi <development@brewpi.com>"]
+license = "GPL-3.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4"
+cryptography = "40.0.1"
+pyjwt = "^2.7.0"
+flask = "^2.3.2"
+gunicorn = "^20.1.0"
+flask-cors = "^4.0.0"
+
+[tool.poetry.dev-dependencies]
+pytest-cov = "*"
+pytest-mock = "*"
+flake8 = "*"
+autopep8 = "*"
+flake8-quotes = "*"
+pytest = "*"
+
+[build-system]
+requires = ["poetry>=0.12", "cryptography==40.0.1"]
+build-backend = "poetry.masonry.api"
