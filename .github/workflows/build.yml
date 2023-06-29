@@ -44,7 +44,7 @@ jobs:
           poetry install
 
       - name: Run setup script
-        run: before_build.sh
+        run: bash before_build.sh
 
       - name: Build Docker image
         uses: docker/build-push-action@v4
