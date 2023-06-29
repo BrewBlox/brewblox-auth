@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from logging.config import dictConfig
 
 import jwt
-from flask import Flask, abort, make_response, request
+from flask import Flask, abort, request
 from flask_cors import CORS
 
 JWT_SECRET_KEY = 'JWT secret key'
@@ -59,6 +59,4 @@ def login():
         },
         JWT_SECRET_KEY)
 
-    resp = make_response()
-    resp.headers.add('Authorization', token)
-    return resp
+    return token
