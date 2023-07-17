@@ -11,7 +11,7 @@ VALIDITY = timedelta(seconds=1800)
 dictConfig({
     'version': 1,
     'formatters': {'default': {
-        'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+        'format': '[%(asctime)s] %(levelname)s: %(message)s',
     }},
     'handlers': {'wsgi': {
         'class': 'logging.StreamHandler',
@@ -30,9 +30,25 @@ CORS(app)
 
 @app.route('/auth/verify')
 def verify():
+    protocol = request.headers.get('X-Forwarded-Proto')
+    method = request.headers.get('X-Forwarded-Method')
+
+    # Authentication is not supported for HTTP
+    # Local requests are trusted by default
+    if protocol == 'http':
+        return ''
+
+    # Always forward the preflight request
+    # We'll check the actual request anyway
+    if method == 'OPTIONS':
+        return ''
+
     token = request.headers.get('Authorization')
+    if not token:
+        abort(401)
+
     try:
-        decoded = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
+        decoded = jwt.decode(token.encode(), JWT_SECRET_KEY, algorithms=['HS256'])
         app.logger.info(decoded)
         return ''
     except jwt.DecodeError as ex:
