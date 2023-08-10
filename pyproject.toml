@@ -12,15 +12,15 @@ cryptography = "40.0.1"
 pyjwt = "^2.7.0"
 flask = "^2.3.2"
 gunicorn = "^20.1.0"
-flask-cors = "^4.0.0"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest-cov = "*"
 pytest-mock = "*"
 flake8 = "*"
 autopep8 = "*"
 flake8-quotes = "*"
 pytest = "*"
+invoke = "^2.2.0"
 
 [build-system]
 requires = ["poetry>=0.12", "cryptography==40.0.1"]

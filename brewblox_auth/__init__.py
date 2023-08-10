@@ -1,12 +1,17 @@
+import os
+import re
 from datetime import datetime, timedelta, timezone
 from logging.config import dictConfig
 
 import jwt
-from flask import Flask, abort, request
-from flask_cors import CORS
+from flask import Flask, Response, abort, make_response, request
 
-JWT_SECRET_KEY = 'JWT secret key'
-VALIDITY = timedelta(seconds=1800)
+JWT_SECRET = os.getenv('BREWBLOX_AUTH_JWT_SECRET')
+VERIFY_IGNORE = os.getenv('BREWBLOX_AUTH_VERIFY_IGNORE', '')
+
+VERIFY_IGNORE_EXP = re.compile(VERIFY_IGNORE.replace(',', '|'))
+VALID_DURATION = timedelta(hours=1)
+
 
 dictConfig({
     'version': 1,
@@ -25,33 +30,68 @@ dictConfig({
 })
 
 app = Flask(__name__)
-CORS(app)
+
+
+def make_token_response(username: str) -> Response:
+    expires = datetime.now(tz=timezone.utc) + VALID_DURATION
+    token = jwt.encode(
+        {
+            'username': username,
+            'exp': int(expires.timestamp()),
+        },
+        JWT_SECRET)
+    resp = make_response(token)
+    resp.set_cookie('Authorization',
+                    token,
+                    expires=expires,
+                    secure=True)
+
+    return resp
 
 
 @app.route('/auth/verify')
 def verify():
-    protocol = request.headers.get('X-Forwarded-Proto')
-    method = request.headers.get('X-Forwarded-Method')
+    method = request.headers.get('X-Forwarded-Method', '')
+    uri = request.headers.get('X-Forwarded-Uri', '')
 
-    # Authentication is not supported for HTTP
-    # Local requests are trusted by default
-    if protocol == 'http':
+    # Some requests should not be checked
+    # These include:
+    # - CORS preflight requests. The actual request will be checked.
+    # - Requests to this service.
+    # - Requests to endpoints marked as ignored by configuration.
+    if method == 'OPTIONS' \
+        or uri.startswith('/auth/') \
+            or re.fullmatch(VERIFY_IGNORE_EXP, uri):
+        app.logger.info(f'skip: {uri}')
         return ''
 
-    # Always forward the preflight request
-    # We'll check the actual request anyway
-    if method == 'OPTIONS':
-        return ''
-
-    token = request.headers.get('Authorization')
+    token = request.cookies.get('Authorization')
     if not token:
+        app.logger.warning(f'no token: {uri} \n{request.headers}')
         abort(401)
 
     try:
-        decoded = jwt.decode(token.encode(), JWT_SECRET_KEY, algorithms=['HS256'])
-        app.logger.info(decoded)
+        jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
+        app.logger.info(f'pass: {uri}')
         return ''
-    except jwt.DecodeError as ex:
+    except (jwt.DecodeError, jwt.ExpiredSignatureError) as ex:
+        app.logger.warning(f'fail: {uri} \n{ex}\n{request.headers}')
+        abort(401)
+
+
+@app.route('/auth/refresh')
+def refresh():
+    token = request.cookies.get('Authorization')
+    if not token:
+        app.logger.warning(f'No token! \n{request.headers}')
+        abort(401)
+
+    try:
+        decoded = jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
+        username = decoded['username']
+        app.logger.info(f'refresh: {username}')
+        return make_token_response(username)
+    except (jwt.DecodeError, jwt.ExpiredSignatureError) as ex:
         app.logger.warning(str(ex))
         abort(401)
 
@@ -67,12 +107,5 @@ def login():
     if username != 'username' or password != 'password':
         abort(401)
 
-    expires = datetime.now(tz=timezone.utc) + VALIDITY
-    token = jwt.encode(
-        {
-            'username': username,
-            'exp': int(expires.timestamp()),
-        },
-        JWT_SECRET_KEY)
-
-    return token
+    app.logger.info(f'login: {username}')
+    return make_token_response(username)

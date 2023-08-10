@@ -43,8 +43,8 @@ jobs:
           pip install poetry wheel
           poetry install
 
-      - name: Run setup script
-        run: bash before_build.sh
+      - name: Build dist
+        run: poetry run invoke build
 
       - name: Build Docker image
         uses: docker/build-push-action@v4
