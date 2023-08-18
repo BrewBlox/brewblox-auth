@@ -19,10 +19,11 @@ ARG service_info=UNKNOWN
 ENV SERVICE_INFO=${service_info}
 
 COPY --from=base /wheeley /wheeley
+COPY ./entrypoint.sh /app/entrypoint.sh
 
 RUN set -ex \
     && pip3 install --no-index --find-links=/wheeley brewblox_auth \
     && rm -rf /wheeley \
     && pip3 freeze
 
-ENTRYPOINT ["gunicorn", "-w=4", "-b=0.0.0.0:5000", "brewblox_auth:app"]
+ENTRYPOINT ["/app/entrypoint.sh"]
