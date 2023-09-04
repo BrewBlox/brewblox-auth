@@ -50,7 +50,10 @@ def read_users(ctx: Context, fname: str) -> tuple[Path, dict]:
 
 
 @task
-def add_user(ctx: Context, username: str, password: str, fname: str = 'data/users.passwd'):
+def add_user(ctx: Context,
+             username: str,
+             password: str,
+             fname: str = 'data/users.passwd'):
     fpath, users = read_users(ctx, fname)
     users[username] = pbkdf2_sha512.hash(password)
 
@@ -59,12 +62,16 @@ def add_user(ctx: Context, username: str, password: str, fname: str = 'data/user
             tempf.write(f'{k}:{v}\n')
         tempf.flush()
         ctx.run(f'sudo cp "{tempf.name}" "{fpath}"')
+        ctx.run(f'sudo chown root:root "{fpath}"')
+        ctx.run(f'sudo chmod a+r "{fpath}"')
 
     print('users:', ', '.join(users.keys()))
 
 
 @task
-def remove_user(ctx: Context, username: str, fname: str = 'data/users.passwd'):
+def remove_user(ctx: Context,
+                username: str,
+                fname: str = 'data/users.passwd'):
     fpath, users = read_users(ctx, fname)
 
     try:
@@ -74,6 +81,8 @@ def remove_user(ctx: Context, username: str, fname: str = 'data/users.passwd'):
                 tempf.write(f'{k}:{v}\n')
             tempf.flush()
             ctx.run(f'sudo cp "{tempf.name}" "{fpath}"')
+            ctx.run(f'sudo chown root:root "{fpath}"')
+            ctx.run(f'sudo chmod a+r "{fpath}"')
 
     except KeyError:
         pass
