@@ -2,11 +2,14 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from logging.config import dictConfig
+from pathlib import Path
 
 import jwt
 from flask import Flask, Response, abort, make_response, request
+from passlib.hash import pbkdf2_sha512
 
 JWT_SECRET = os.getenv('BREWBLOX_AUTH_JWT_SECRET')
+PASSWD_FILE = Path(os.getenv('BREWBLOX_AUTH_PASSWD_FILE')).resolve()
 VERIFY_IGNORE = os.getenv('BREWBLOX_AUTH_VERIFY_IGNORE', '')
 
 VERIFY_IGNORE_EXP = re.compile(VERIFY_IGNORE.replace(',', '|'))
@@ -30,6 +33,23 @@ dictConfig({
 })
 
 app = Flask(__name__)
+
+
+def read_users():
+    try:
+        return app.config['users']
+    except KeyError:
+        with open(PASSWD_FILE) as f:
+            users = {
+                name: hashed
+                for (name, hashed)
+                in [line.strip().split(':', 1)
+                    for line in f.readlines()
+                    if ':' in line]
+            }
+
+        app.config['users'] = users
+        return users
 
 
 def make_token_response(username: str) -> Response:
@@ -89,6 +109,11 @@ def refresh():
     try:
         decoded = jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
         username = decoded['username']
+
+        # Check if user is still listed
+        if username not in read_users():
+            abort(401)
+
         app.logger.info(f'refresh: {username}')
         return make_token_response(username)
     except (jwt.DecodeError, jwt.ExpiredSignatureError) as ex:
@@ -102,9 +127,14 @@ def login():
 
     username = args.get('username')
     password = args.get('password')
+    stored = read_users().get(username)
 
-    # TODO: actual implementation
-    if username != 'username' or password != 'password':
+    # User does not exist
+    if stored is None:
+        abort(401)
+
+    # Password does not match
+    if not pbkdf2_sha512.verify(password, stored):
         abort(401)
 
     app.logger.info(f'login: {username}')
