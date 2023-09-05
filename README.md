@@ -7,6 +7,7 @@ Implements a webserver with multiple endpoints:
 - `/auth/verify` checks for the presence of a valid JSON Web Token (JWT) in the request cookies. This is intended to be used as endpoint for the ForwardAuth Traefik middleware.
 - `/auth/refresh` checks for the presence of a valid authorization JWT in the request cookies. If present, a new token (with updated expiry) is generated and placed in cookies.
 - `/auth/login` checks provided username / password against the password file. If verification is successful, a JWT is placed in cookies.
+- `/auth/logout` removes the cookie if present.
 
 The password file (./data/users.passwd) contains a `:`-separated username and hashed password per line.
 Password hashing is done using the `pbkdf2_sha512` function of the Python `passlib` module.

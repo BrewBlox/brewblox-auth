@@ -5,7 +5,7 @@ from logging.config import dictConfig
 from pathlib import Path
 
 import jwt
-from flask import Flask, Response, abort, make_response, request
+from flask import Flask, Response, abort, jsonify, make_response, request
 from passlib.hash import pbkdf2_sha512
 
 JWT_SECRET = os.getenv('BREWBLOX_AUTH_JWT_SECRET')
@@ -13,6 +13,7 @@ PASSWD_FILE = Path(os.getenv('BREWBLOX_AUTH_PASSWD_FILE')).resolve()
 VERIFY_IGNORE = os.getenv('BREWBLOX_AUTH_VERIFY_IGNORE', '')
 
 VERIFY_IGNORE_EXP = re.compile(VERIFY_IGNORE.replace(',', '|'))
+AUTH_COOKIE_NAME = 'Authorization'
 VALID_DURATION = timedelta(hours=1)
 
 
@@ -60,7 +61,8 @@ def make_token_response(username: str) -> Response:
             'exp': int(expires.timestamp()),
         },
         JWT_SECRET)
-    resp = make_response(token)
+    resp = jsonify(username=username,
+                   token=token)
     resp.set_cookie('Authorization',
                     token,
                     expires=expires,
@@ -82,42 +84,16 @@ def verify():
     if method == 'OPTIONS' \
         or uri.startswith('/auth/') \
             or re.fullmatch(VERIFY_IGNORE_EXP, uri):
-        app.logger.info(f'skip: {uri}')
         return ''
 
-    token = request.cookies.get('Authorization')
+    token = request.cookies.get(AUTH_COOKIE_NAME)
     if not token:
-        app.logger.warning(f'no token: {uri} \n{request.headers}')
         abort(401)
 
     try:
         jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
-        app.logger.info(f'pass: {uri}')
         return ''
-    except (jwt.DecodeError, jwt.ExpiredSignatureError) as ex:
-        app.logger.warning(f'fail: {uri} \n{ex}\n{request.headers}')
-        abort(401)
-
-
-@app.route('/auth/refresh')
-def refresh():
-    token = request.cookies.get('Authorization')
-    if not token:
-        app.logger.warning(f'No token! \n{request.headers}')
-        abort(401)
-
-    try:
-        decoded = jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
-        username = decoded['username']
-
-        # Check if user is still listed
-        if username not in read_users():
-            abort(401)
-
-        app.logger.info(f'refresh: {username}')
-        return make_token_response(username)
-    except (jwt.DecodeError, jwt.ExpiredSignatureError) as ex:
-        app.logger.warning(str(ex))
+    except (jwt.DecodeError, jwt.ExpiredSignatureError):
         abort(401)
 
 
@@ -137,5 +113,30 @@ def login():
     if not pbkdf2_sha512.verify(password, stored):
         abort(401)
 
-    app.logger.info(f'login: {username}')
     return make_token_response(username)
+
+
+@app.route('/auth/refresh')
+def refresh():
+    token = request.cookies.get(AUTH_COOKIE_NAME)
+    if not token:
+        abort(401)
+
+    try:
+        decoded = jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
+        username = decoded['username']
+
+        # Check if user is still listed
+        if username not in read_users():
+            abort(401)
+
+        return make_token_response(username)
+    except (jwt.DecodeError, jwt.ExpiredSignatureError):
+        abort(401)
+
+
+@app.route('/auth/logout')
+def logout():
+    resp = make_response('')
+    resp.delete_cookie(AUTH_COOKIE_NAME, secure=True)
+    return resp
