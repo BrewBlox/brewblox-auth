@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 
-FROM python:3.9-bookworm as base
+FROM python:3.9-bullseye as base
 
 COPY ./dist /app/dist
 
@@ -16,7 +16,7 @@ RUN <<EOF
     pip3 wheel --wheel-dir=/wheeley /app/dist/*.tar.gz
 EOF
 
-FROM python:3.9-slim-bookworm
+FROM python:3.9-slim-bullseye
 EXPOSE 5000
 WORKDIR /app
 
