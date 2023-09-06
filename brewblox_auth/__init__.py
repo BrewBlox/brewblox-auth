@@ -8,12 +8,14 @@ import jwt
 from flask import Flask, Response, abort, jsonify, make_response, request
 from passlib.hash import pbkdf2_sha512
 
-JWT_SECRET = os.getenv('BREWBLOX_AUTH_JWT_SECRET')
-PASSWD_FILE = Path(os.getenv('BREWBLOX_AUTH_PASSWD_FILE')).resolve()
-VERIFY_IGNORE = os.getenv('BREWBLOX_AUTH_VERIFY_IGNORE', '')
+from .utils import strtobool
 
-VERIFY_IGNORE_EXP = re.compile(VERIFY_IGNORE.replace(',', '|'))
-AUTH_COOKIE_NAME = 'Authorization'
+AUTH_ENABLED = strtobool(os.getenv('BREWBLOX_AUTH_ENABLED', 'True'))
+AUTH_IGNORE = re.compile(os.getenv('BREWBLOX_AUTH_IGNORE', ''))
+AUTH_JWT_SECRET = os.getenv('BREWBLOX_AUTH_JWT_SECRET')
+AUTH_PASSWD_FILE = Path(os.getenv('BREWBLOX_AUTH_PASSWD_FILE')).resolve()
+
+COOKIE_NAME = 'Authorization'
 VALID_DURATION = timedelta(hours=1)
 
 
@@ -40,7 +42,7 @@ def read_users():
     try:
         return app.config['users']
     except KeyError:
-        with open(PASSWD_FILE) as f:
+        with open(AUTH_PASSWD_FILE) as f:
             users = {
                 name: hashed
                 for (name, hashed)
@@ -60,9 +62,10 @@ def make_token_response(username: str) -> Response:
             'username': username,
             'exp': int(expires.timestamp()),
         },
-        JWT_SECRET)
+        AUTH_JWT_SECRET)
     resp = jsonify(username=username,
-                   token=token)
+                   token=token,
+                   enabled=AUTH_ENABLED)
     resp.set_cookie('Authorization',
                     token,
                     expires=expires,
@@ -76,6 +79,9 @@ def verify():
     method = request.headers.get('X-Forwarded-Method', '')
     uri = request.headers.get('X-Forwarded-Uri', '')
 
+    if not AUTH_ENABLED:
+        return ''
+
     # Some requests should not be checked
     # These include:
     # - CORS preflight requests. The actual request will be checked.
@@ -83,15 +89,15 @@ def verify():
     # - Requests to endpoints marked as ignored by configuration.
     if method == 'OPTIONS' \
         or uri.startswith('/auth/') \
-            or re.fullmatch(VERIFY_IGNORE_EXP, uri):
+            or re.fullmatch(AUTH_IGNORE, uri):
         return ''
 
-    token = request.cookies.get(AUTH_COOKIE_NAME)
+    token = request.cookies.get(COOKIE_NAME)
     if not token:
         abort(401)
 
     try:
-        jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
+        jwt.decode(token.encode(), AUTH_JWT_SECRET, algorithms=['HS256'])
         return ''
     except (jwt.DecodeError, jwt.ExpiredSignatureError):
         abort(401)
@@ -118,12 +124,17 @@ def login():
 
 @app.route('/auth/refresh')
 def refresh():
-    token = request.cookies.get(AUTH_COOKIE_NAME)
+    if not AUTH_ENABLED:
+        return jsonify(username=None,
+                       token=None,
+                       enable=AUTH_ENABLED)
+
+    token = request.cookies.get(COOKIE_NAME)
     if not token:
         abort(401)
 
     try:
-        decoded = jwt.decode(token.encode(), JWT_SECRET, algorithms=['HS256'])
+        decoded = jwt.decode(token.encode(), AUTH_JWT_SECRET, algorithms=['HS256'])
         username = decoded['username']
 
         # Check if user is still listed
@@ -138,5 +149,5 @@ def refresh():
 @app.route('/auth/logout')
 def logout():
     resp = make_response('')
-    resp.delete_cookie(AUTH_COOKIE_NAME, secure=True)
+    resp.delete_cookie(COOKIE_NAME, secure=True)
     return resp
