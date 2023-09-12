@@ -16,7 +16,7 @@ AUTH_JWT_SECRET = os.getenv('BREWBLOX_AUTH_JWT_SECRET')
 AUTH_PASSWD_FILE = Path(os.getenv('BREWBLOX_AUTH_PASSWD_FILE')).resolve()
 
 COOKIE_NAME = 'Authorization'
-VALID_DURATION = timedelta(hours=1)
+VALID_DURATION = timedelta(days=7)
 
 
 dictConfig({
