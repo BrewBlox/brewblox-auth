@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.4
-
 FROM python:3.9-bullseye as base
 
 COPY ./dist /app/dist
