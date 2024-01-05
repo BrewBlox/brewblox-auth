@@ -14,8 +14,8 @@ touch $PASSWD_FILE
 exec uvicorn \
     --host 0.0.0.0 \
     --port 5000 \
+    --factory \
     --reload \
     --reload-dir $DATA_DIR \
     --reload-include "*.passwd" \
-    "$@" \
-    brewblox_auth:app
+    brewblox_auth:create_app

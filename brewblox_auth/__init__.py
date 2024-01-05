@@ -1,23 +1,22 @@
-import os
 import re
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
 import jwt
-from fastapi import Cookie, FastAPI, Header, HTTPException, Request, Response
+from fastapi import (APIRouter, Cookie, FastAPI, Header, HTTPException,
+                     Request, Response)
 from passlib.hash import pbkdf2_sha512
 from pydantic import BaseModel
-
-from .utils import strtobool
-
-AUTH_ENABLED = strtobool(os.getenv('BREWBLOX_AUTH_ENABLED', 'True'))
-AUTH_IGNORE = re.compile(os.getenv('BREWBLOX_AUTH_IGNORE', ''))
-AUTH_JWT_SECRET = os.getenv('BREWBLOX_AUTH_JWT_SECRET')
-AUTH_PASSWD_FILE = Path(os.getenv('BREWBLOX_AUTH_PASSWD_FILE')).resolve()
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 COOKIE_NAME = 'Authorization'
-VALID_DURATION = timedelta(days=7)
+
+CV_USERS: ContextVar[dict[str, str]] = ContextVar('users')
+
+router = APIRouter()
 
 
 class LoginData(BaseModel):
@@ -32,43 +31,73 @@ class JwtData(BaseModel):
     enabled: bool
 
 
-app = FastAPI(docs_url='/auth/api/doc',
-              redoc_url='/auth/api/redoc',
-              openapi_url='/auth/openapi.json')
+class ServiceConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file='.appenv',
+        env_prefix='brewblox_auth_',
+        case_sensitive=False,
+        json_schema_extra='ignore',
+    )
+
+    name: str = 'auth'
+    enabled: bool = True
+    ignore: str = ''
+    jwt_secret: str
+    passwd_file: Path
+    valid_duration: timedelta = timedelta(days=7)
 
 
-@app.on_event('startup')
-def load_users():
-    with open(AUTH_PASSWD_FILE) as f:
-        app.state.users = {
+@lru_cache
+def get_config() -> ServiceConfig:
+    return ServiceConfig()
+
+
+def create_app() -> FastAPI:
+    config = get_config()
+
+    with open(config.passwd_file) as f:
+        CV_USERS.set({
             name: hashed
             for (name, hashed)
             in [line.strip().split(':', 1)
                 for line in f.readlines()
                 if ':' in line]
-        }
+        })
+
+    prefix = f'/{config.name}'
+    app = FastAPI(docs_url=f'{prefix}/api/doc',
+                  redoc_url=f'{prefix}/api/redoc',
+                  openapi_url=f'{prefix}/openapi.json')
+
+    app.include_router(router, prefix=prefix)
+
+    return app
 
 
 def make_token(username: str) -> JwtData:
-    expires = datetime.now(tz=timezone.utc) + VALID_DURATION
+    config = get_config()
+
+    expires = datetime.now(tz=timezone.utc) + config.valid_duration
     token = jwt.encode(
         {
             'username': username,
             'exp': int(expires.timestamp()),
         },
-        AUTH_JWT_SECRET)
+        config.jwt_secret)
 
     return JwtData(username=username,
                    token=token,
                    expires=expires,
-                   enabled=AUTH_ENABLED)
+                   enabled=config.enabled)
 
 
-@app.get('/auth/verify')
+@router.get('/verify')
 async def verify(method: Annotated[str | None, Header(alias='X-Forwarded-Method')] = None,
                  uri: Annotated[str | None, Header(alias='X-Forwarded-Uri')] = None,
                  token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None):
-    if not AUTH_ENABLED:
+    config = get_config()
+
+    if not config.enabled:
         return
 
     # Some requests should not be checked
@@ -78,28 +107,30 @@ async def verify(method: Annotated[str | None, Header(alias='X-Forwarded-Method'
     # - Requests to endpoints marked as ignored by configuration.
     if method == 'OPTIONS' \
         or uri.startswith('/') \
-            or re.fullmatch(AUTH_IGNORE, uri):
+            or re.fullmatch(config.ignore, uri):
         return
 
     if not token:
         raise HTTPException(401)
 
     try:
-        jwt.decode(token.encode(), AUTH_JWT_SECRET, algorithms=['HS256'])
+        jwt.decode(token.encode(), config.jwt_secret, algorithms=['HS256'])
         return
     except (jwt.DecodeError, jwt.ExpiredSignatureError):
         raise HTTPException(401)
 
 
-@app.post('/auth/login')
+@router.post('/login')
 async def login(request: Request, response: Response, data: LoginData) -> JwtData:
-    if not AUTH_ENABLED:
+    config = get_config()
+
+    if not config.enabled:
         return JwtData(username=None,
                        token=None,
                        expires=None,
                        enabled=False)
 
-    stored = request.app.state.users.get(data.username)
+    stored = CV_USERS.get().get(data.username)
 
     # User does not exist
     if stored is None:
@@ -119,12 +150,14 @@ async def login(request: Request, response: Response, data: LoginData) -> JwtDat
     return result
 
 
-@app.get('/auth/refresh')
+@router.get('/refresh')
 async def refresh(request: Request,
                   response: Response,
                   token: Annotated[str | None, Cookie(alias=COOKIE_NAME)] = None,
                   ) -> JwtData:
-    if not AUTH_ENABLED:
+    config = get_config()
+
+    if not config.enabled:
         return JwtData(username=None,
                        token=None,
                        expires=None,
@@ -134,11 +167,11 @@ async def refresh(request: Request,
         raise HTTPException(401)
 
     try:
-        decoded = jwt.decode(token.encode(), AUTH_JWT_SECRET, algorithms=['HS256'])
+        decoded = jwt.decode(token.encode(), config.jwt_secret, algorithms=['HS256'])
         username = decoded['username']
 
         # Check if user is still listed
-        if username not in request.app.state.users:
+        if username not in CV_USERS.get():
             raise HTTPException(401)
 
         result = make_token(username)
@@ -153,7 +186,7 @@ async def refresh(request: Request,
         raise HTTPException(401)
 
 
-@app.get('/auth/logout')
+@router.get('/logout')
 async def logout(response: Response):
     response.delete_cookie(COOKIE_NAME, secure=True)
     return
