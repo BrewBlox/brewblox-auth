@@ -19,6 +19,11 @@ CV_USERS: ContextVar[dict[str, str]] = ContextVar('users')
 router = APIRouter()
 
 
+class AuthStatus(BaseModel):
+    enabled: bool
+    valid_duration: timedelta
+
+
 class LoginData(BaseModel):
     username: str
     password: str
@@ -89,6 +94,13 @@ def make_token(username: str) -> JwtData:
                    token=token,
                    expires=expires,
                    enabled=config.enabled)
+
+
+@router.get('/status')
+async def status() -> AuthStatus:
+    config = get_config()
+    return AuthStatus(enabled=config.enabled,
+                      valid_duration=config.valid_duration)
 
 
 @router.get('/verify')
