@@ -1,3 +1,4 @@
+import logging
 import re
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 COOKIE_NAME = 'Authorization'
 
+LOGGER = logging.getLogger(__name__)
 CV_USERS: ContextVar[dict[str, str]] = ContextVar('users')
 
 router = APIRouter()
@@ -45,6 +47,7 @@ class ServiceConfig(BaseSettings):
     )
 
     name: str = 'auth'
+    debug: bool = False
     enabled: bool = True
     ignore: str = ''
     jwt_secret: str
@@ -57,8 +60,22 @@ def get_config() -> ServiceConfig:
     return ServiceConfig()
 
 
+def setup_logging(debug: bool):
+    level = logging.DEBUG if debug else logging.INFO
+    unimportant_level = logging.INFO if debug else logging.WARN
+    format = '%(asctime)s.%(msecs)03d [%(levelname).1s:%(name)s:%(lineno)d] %(message)s'
+    datefmt = '%Y/%m/%d %H:%M:%S'
+
+    logging.basicConfig(level=level, format=format, datefmt=datefmt)
+    logging.captureWarnings(True)
+
+    logging.getLogger('uvicorn.access').setLevel(unimportant_level)
+    logging.getLogger('uvicorn.error').disabled = True
+
+
 def create_app() -> FastAPI:
     config = get_config()
+    setup_logging(config.debug)
 
     with open(config.passwd_file) as f:
         CV_USERS.set({
