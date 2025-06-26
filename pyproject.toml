@@ -5,6 +5,7 @@ description = "Brewblox authentication middleware"
 authors = ["BrewPi <development@brewpi.com>"]
 license = "GPL-3.0"
 readme = "README.md"
+requires-poetry = ">=2.0"
 
 [tool.poetry.dependencies]
 python = "~3.11"
@@ -24,6 +25,9 @@ flake8-quotes = "*"
 pytest = "*"
 invoke = "^2.2.0"
 
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.8"
+
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
