@@ -135,7 +135,7 @@ async def verify(method: Annotated[str | None, Header(alias='X-Forwarded-Method'
     # - Requests to this service.
     # - Requests to endpoints marked as ignored by configuration.
     if method == 'OPTIONS' \
-        or uri.startswith('/') \
+        or uri.startswith(f'/{config.name}/') \
             or re.fullmatch(config.ignore, uri):
         return
 
