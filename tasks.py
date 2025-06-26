@@ -18,7 +18,7 @@ def build(ctx: Context):
 @task(pre=[build])
 def local_docker(ctx: Context, tag='local'):
     with ctx.cd(ROOT):
-        ctx.run(f'docker build -t ghcr.io/brewblox/brewblox-auth:{tag} .')
+        ctx.run(f'docker build --load -t ghcr.io/brewblox/brewblox-auth:{tag} .')
 
 
 @task
